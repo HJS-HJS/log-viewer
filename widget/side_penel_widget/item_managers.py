@@ -1,18 +1,15 @@
-# item_managers.py
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, 
     QListWidget, QListWidgetItem, QPushButton, QCheckBox, 
-    QColorDialog
+    QColorDialog, QLabel
 )
 from PyQt5.QtGui import QColor
 from PyQt5.QtCore import Qt, pyqtSignal
 
-# --- 항목 관리자 (필터/하이라이트의 부모 클래스) ---
 class BaseItemManager(QWidget):
-    # (시그널 정의)
     items_changed = pyqtSignal(list)
     
-    def __init__(self, add_placeholder):
+    def __init__(self, name='', add_placeholder=''):
         super().__init__()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -23,9 +20,14 @@ class BaseItemManager(QWidget):
         self.add_btn = QPushButton(f"Add {self.__class__.__name__.replace('Manager', '')}")
         
         self.list_widget = QListWidget()
+
+        add_widget = QWidget()
+        add_layout = QHBoxLayout(add_widget)
+        add_layout.addWidget(QLabel(name))
+        add_layout.addWidget(self.add_box)
+        add_layout.addWidget(self.add_btn)
         
-        layout.addWidget(self.add_box)
-        layout.addWidget(self.add_btn)
+        layout.addWidget(add_widget)
         layout.addWidget(self.list_widget)
         
         self.add_box.returnPressed.connect(self.on_add_pressed)
@@ -64,8 +66,8 @@ class BaseItemManager(QWidget):
 
 # --- 필터 관리자 ---
 class FilterManager(BaseItemManager):
-    def __init__(self):
-        super().__init__("Add filter keyword")
+    def __init__(self, filter_type='OR'):
+        super().__init__(filter_type + " Filter", "Add filter keyword")
 
     def on_add_pressed(self):
         term = self.add_box.text().strip()
@@ -113,7 +115,7 @@ class HighlightManager(BaseItemManager):
     items_changed = pyqtSignal(list)
     
     def __init__(self):
-        super().__init__("Add highlight keyword")
+        super().__init__("Highlighter", "Add highlight keyword")
         self.highlight_colors = {}
 
     def on_add_pressed(self):
