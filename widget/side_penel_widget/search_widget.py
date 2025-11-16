@@ -1,4 +1,3 @@
-# search_widget.py
 from PyQt5.QtWidgets import QWidget, QHBoxLayout, QLineEdit, QCheckBox, QLabel
 from PyQt5.QtGui import QTextDocument
 from PyQt5.QtCore import pyqtSignal
