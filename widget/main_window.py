@@ -1,23 +1,23 @@
-# main_window.py
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QSplitter, 
     QLineEdit, QPushButton, QFileDialog, QMessageBox, QCheckBox
 )
 from PyQt5.QtCore import QFileInfo, Qt
+from PyQt5.QtGui import QColor
 
 from .core_logic import LogDataManager, SettingsManager
 from .log_view import LogView
 from .side_panel import SidePanel
 
 class MainWindow(QWidget):
-    def __init__(self):
+    def __init__(self, base_path):
         super().__init__()
         self.setWindowTitle("Log Viewer")
         self.resize(1200, 700)
 
         # 1. 로직 및 설정 관리자 생성
         self.log_data = LogDataManager()
-        self.settings = SettingsManager("log_viewer_config.json")
+        self.settings = SettingsManager(base_path)
 
         # 2. UI 위젯 생성
         self.log_view = LogView()
@@ -46,6 +46,8 @@ class MainWindow(QWidget):
         main_layout.addLayout(top_layout)
         main_layout.addWidget(splitter)
 
+        self.setLayout(main_layout)
+
         # 4. 시그널/슬롯 연결 (핵심)
         self.file_btn.clicked.connect(self.on_open_file_dialog)
         self.file_path_box.returnPressed.connect(self.on_load_from_path)
@@ -59,6 +61,9 @@ class MainWindow(QWidget):
 
         # 5. 설정 불러오기
         self.load_settings()
+        
+        # 6. 파일 드래그, 드롭 활성화
+        self.setAcceptDrops(True)
 
     # --- 슬롯 메서드 ---
     
@@ -81,17 +86,43 @@ class MainWindow(QWidget):
             return
             
         if self.log_data.load_file(path):
-            # 파일 로드 성공 시, 현재 필터/하이라이트 기준으로
-            # 뷰를 다시 그림
             self.on_filters_changed()
             self.on_highlights_changed()
         else:
             QMessageBox.warning(self, "Error", f"Failed to load log file:\n{path}")
 
+    def dragEnterEvent(self, event):
+        """파일을 드래그해서 창 위로 가져왔을 때 호출됩니다."""
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event):
+        """파일을 창에 드롭했을 때 호출됩니다."""
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+            
+            try:
+                url = event.mimeData().urls()[0]
+            except IndexError:
+                return
+
+            if url.isLocalFile():
+                file_path = url.toLocalFile()
+                if file_path:
+                    self.file_path_box.setText(file_path)
+                    self.load_file(file_path)
+            else:
+                event.ignore()
+        else:
+            event.ignore()
+
     def on_filters_changed(self):
         """필터가 변경되면, 로직을 호출하고 뷰를 갱신합니다."""
-        active_filters = self.side_panel.filter_manager.get_all_data()
-        filtered_data = self.log_data.get_filtered_lines(active_filters)
+        or_filters = self.side_panel.or_filter_manager.get_all_data()
+        and_filters = self.side_panel.and_filter_manager.get_all_data()
+        filtered_data = self.log_data.get_filtered_lines(or_filters, and_filters)
         self.log_view.set_log_data(filtered_data)
         # 필터 변경 시 하이라이트도 다시 적용해야 함
         self.on_highlights_changed()
@@ -166,28 +197,52 @@ class MainWindow(QWidget):
     def closeEvent(self, event):
         """창을 닫을 때 현재 설정을 저장합니다."""
         # 각 매니저에서 '모든' 아이템의 데이터를 수집
-        filters = []
-        for i in range(self.side_panel.filter_manager.list_widget.count()):
-            item = self.side_panel.filter_manager.list_widget.item(i)
-            widget = self.side_panel.filter_manager.list_widget.itemWidget(item)
-            data = item.data(Qt.UserRole)
-            case_cb = widget.findChild(QCheckBox, "case_i_cb")
-            data["is_case_i"] = case_cb.isChecked() if case_cb else False
-            filters.append(data)
-            
-        highlights = []
-        for i in range(self.side_panel.hl_manager.list_widget.count()):
-            item = self.side_panel.hl_manager.list_widget.item(i)
-            widget = self.side_panel.hl_manager.list_widget.itemWidget(item)
-            data = item.data(Qt.UserRole)
-            case_cb = widget.findChild(QCheckBox, "case_i_cb")
-            data["is_case_i"] = case_cb.isChecked() if case_cb else False
-            data["color"] = self.side_panel.hl_manager.highlight_colors.get(data["term"], QColor("#ffff00")).name()
-            highlights.append(data)
+        try:
+            or_filters = []
+            for i in range(self.side_panel.or_filter_manager.list_widget.count()):
+                item = self.side_panel.or_filter_manager.list_widget.item(i)
+                widget = self.side_panel.or_filter_manager.list_widget.itemWidget(item)
+                data = item.data(Qt.UserRole)
+                cb = widget.findChild(QCheckBox)
+                data["is_checked"] = cb.isChecked() if cb else False
+                case_cb = widget.findChild(QCheckBox, "case_i_cb")
+                data["is_case_i"] = case_cb.isChecked() if case_cb else False
+                or_filters.append(data)
+                
+            add_filters = []
+            for i in range(self.side_panel.and_filter_manager.list_widget.count()):
+                item = self.side_panel.and_filter_manager.list_widget.item(i)
+                widget = self.side_panel.and_filter_manager.list_widget.itemWidget(item)
+                data = item.data(Qt.UserRole)
+                cb = widget.findChild(QCheckBox)
+                data["is_checked"] = cb.isChecked() if cb else False
+                case_cb = widget.findChild(QCheckBox, "case_i_cb")
+                data["is_case_i"] = case_cb.isChecked() if case_cb else False
+                add_filters.append(data)
+                
+            highlights = []
+            for i in range(self.side_panel.hl_manager.list_widget.count()):
+                item = self.side_panel.hl_manager.list_widget.item(i)
+                widget = self.side_panel.hl_manager.list_widget.itemWidget(item)
+                data = item.data(Qt.UserRole)
+                cb = widget.findChild(QCheckBox)
+                data["is_checked"] = cb.isChecked() if cb else False
+                case_cb = widget.findChild(QCheckBox, "case_i_cb")
+                data["is_case_i"] = case_cb.isChecked() if case_cb else False
+                data["color"] = self.side_panel.hl_manager.highlight_colors.get(data["term"], QColor("#ffff00")).name()
+                highlights.append(data)
 
-        config_to_save = {
-            "filters": filters,
-            "highlights": highlights
-        }
-        self.settings.save(config_to_save)
+            memo = self.side_panel.memo_widget.get_text()
+            
+            config_to_save = {
+                "memo": memo,
+                "or_filters": or_filters,
+                "add_filters": add_filters,
+                "highlights": highlights
+            }
+            self.settings.save(config_to_save)
+        except Exception as e:
+            # 저장 중 오류가 발생해도 앱은 닫히도록 하되, 콘솔에 오류를 출력
+            print(f"Error during save on close: {e}")
+
         event.accept()
