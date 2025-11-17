@@ -45,8 +45,8 @@ if __name__ == "__main__":
     /* 'i' 체크박스만 작게 만들기 */
     QCheckBox[objectName="case_i_cb"] { font-size: 9pt; }
     QCheckBox[objectName="case_i_cb"]::indicator { width: 12px; height: 12px; }
-    QScrollBar:vertical { background: #1e1e1e; width: 12px; min-height: 45px;}
-    QScrollBar::handle:vertical { background: #e0e0e0; }
+    QScrollBar:vertical { background: #1e1e1e; width: 12px;}
+    QScrollBar::handle:vertical { background: #e0e0e0;  min-height: 100px; margin-top: -2px; margin-bottom: -2px; border-radius: 4px;}
     QSplitter::handle { background-color: #444; }
     QSplitter::handle:horizontal { width: 2px; }
     """)
